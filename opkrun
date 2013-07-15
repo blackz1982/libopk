@@ -59,6 +59,16 @@ def main():
 	elif len(argv) > 3:
 		print "WARNING: Arguments ignored, application doesn't need any"
 
+	savedir = "~/." + mdata['Name']
+	if "X-Flatmush-SaveDir" in opk_mdata.keys():
+		savedir = mdata["X-Flatmush-SaveDir"]
+
+	if mdata["X-Flatmush-SaveDir-Create"].lower() == "true":
+		try:
+			mkdir(savedir)
+		except OSError:
+			pass
+
 	mountpoint = "/mnt/" + mdata['Name']
 	try:
 		mkdir(mountpoint)
@@ -66,8 +76,19 @@ def main():
 		pass
 
 	mount_cmd = "mount -o loop,nosuid,ro " + argv[2] + " " + mountpoint
+	if mdata["X-Flatmush-SaveDir-UnionMount"].lower() == "true":
+		try:
+			mkdir(mountpoint + "-base")
+		except OSError:
+			pass
+		mount_cmd += "-base"
 	if system(mount_cmd) != 0:
 		raise IOError("Unable to mount OPK")
+
+	if mdata["X-Flatmush-SaveDir-UnionMount"].lower() == "true":
+		savedir_mount_cmd = "mount -t aufs -o br=" + savedir + "=rw:" + mountpoint + "-base=ro none " + mountpoint
+		if system(mount_cmd) != 0:
+			raise IOError("Unable to union-mount OPK")
 
 	try:
 		if enable_vtcon and mdata["Terminal"].lower() == "true":
@@ -76,6 +97,9 @@ def main():
 		pass
 
 	elf += " ; umount -l " + mountpoint + " ; rmdir " + mountpoint
+
+	if mdata["X-Flatmush-SaveDir-UnionMount"].lower() == "true":
+		elf += " ; umount -l " + mountpoint + "-base ; rmdir " + mountpoint + "-base"
 
 	chdir(mountpoint)
 	execl("/bin/sh", "/bin/sh", "-c", elf)
